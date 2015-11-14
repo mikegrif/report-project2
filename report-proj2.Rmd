@@ -1,0 +1,219 @@
+---
+title: 'Reproducible Reports - Project #2'
+author: "Mike G"
+date: "November 10, 2015"
+output: html_document
+---
+
+# Title
+
+### Questions:
+1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+columns: FATALIES, INJURIES
+
+
+2. Across the United States, which types of events have the greatest economic consequences?
+
+columns: PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP, WFO
+
+## Synopsis
+
+## Data Processing  
+
+### Load Data into R  
+
+```{r, echo=TRUE}
+
+# load storm data into a dataframe
+storm <- read.table('repdata-data-StormData.csv.bz2', stringsAsFactors = FALSE,sep=",",header=TRUE)
+
+# list data type for each column
+str(storm)
+
+```
+
+### Data Processing - Population Health  
+
+```{r}
+# get events where injuries or fatalities occurred
+require(dplyr)
+
+people <- storm %>%
+            select(EVTYPE, FATALITIES, INJURIES) %>%
+            filter(FATALITIES > 0 | INJURIES > 0)
+
+# look at type of events that impacted people's health
+table(people$EVTYPE)
+
+# We have over 200 events, so let's consolidate them for analysis.
+mapEvent <- function(evt) {
+    result <- "OTHER"
+    evt <- toupper(evt)
+    
+    if (grepl('TORNADO',evt)) {
+        result = 'TORNADO'
+    }
+    else if (grepl('FLOOD',evt) || grepl('RAIN',evt)) {
+         result = 'FLOOD'
+    }
+    else if (grepl('SEA',evt) || grepl('COASTAL',evt) || grepl('CURRENT',evt)) {
+         result = 'FLOOD'
+    }
+     else if (grepl('SURGE',evt) || grepl('SURF',evt) || grepl('RIVER',evt)) {
+         result = 'FLOOD'
+    }
+    else if (grepl('THUNDERSTORM',evt) || grepl('HAIL',evt)) {
+         result = 'THUNDERSTORM'
+    }
+    else if (grepl('SNOW',evt) || grepl('BLIZZARD',evt)) {
+         result = 'SNOW'
+    }
+    else if (grepl('COLD',evt) || grepl('ICE',evt) || grepl('ICY',evt)) {
+         result = 'LOW-TEMP'
+    }
+    else if (grepl('WINTER',evt)) {
+         result = 'LOW-TEMP'
+    }
+    else if (grepl('HEAT',evt) || grepl('WARM',evt)) {
+        result = 'HIGH-TEMP' 
+    }
+    else if (grepl('FIRE',evt)) {
+        result = 'FIRE'
+    }
+    else if (grepl('HURRICANE',evt)) {
+        result = 'HURRICANE'
+    }
+    else if (grepl('WIND',evt)) {
+        result = 'WIND'
+    }
+    else if (grepl('LIGHTNING',evt)) {
+        result = 'LIGHTNING'
+    }
+    else if (grepl('AVALANCHE',evt) || grepl('SLIDE',evt)) {
+        result <- 'LANDSLIDE'
+    }
+    else if (grepl('DUST',evt)) {
+        result <- 'DUST'
+    }
+    
+    return(result)
+}
+
+# use consolidated event types for people dataframe
+people$EVTYPE <- sapply(people$EVTYPE, mapEvent)
+
+```
+
+
+### Data Processing - Economic Impact 
+
+```{r}
+
+# get events where crops or property damage occurred
+property <- storm %>%
+                select(EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP) %>%
+                filter(PROPDMG > 0 | CROPDMG > 0)
+
+```
+
+#### Common Unit for Economic Damage  
+In the storm dataset, columns CROPDMGEXP and PROPDMGEXP contain the units for
+economic damage listed in columns CROPDMG AND PROPDMG. The columns use the 
+following symbols:  
+* k or K - dollars in thousands
+* m or M - dollars in millions
+* b or B - dollars in billions  
+
+For our analysis, we will convert all damage amounts to units of thousand of 
+dollars.
+
+```{r}
+
+# convert units to upper case 
+property$PROPDMGEXP <- toupper(property$PROPDMGEXP)
+property$CROPDMGEXP <- toupper(property$CROPDMGEXP)
+
+# remove rows with invalid values for units
+values <- c('K','M','B')
+
+property <- property %>%
+            filter(PROPDMGEXP %in% values | CROPDMGEXP %in% values)
+
+# use consolidated events for property dataframe
+property$EVTYPE <- sapply(property$EVTYPE, mapEvent)
+
+require(reshape2)
+
+# collapse PROPDMGEXP and CROPDMGEXP into single column
+property2 <- melt(property, id=c('EVTYPE','PROPDMG','CROPDMG'))
+head(property2)
+
+# collapse PROPDMG and CROPDMG into single column
+property2 <- melt(property2, id=c('EVTYPE','variable','value'))
+head(property2)
+
+# remove column 2, since it is no longer useful for analysis
+property2 <- property2[,-2]
+head(property2)
+
+# update names for column
+names(property2) <- c('EVTYPE','UNIT','TYPE','AMOUNT')
+
+# function to convert all damages to thousands of dollars
+convertDamages <- function(df) {
+    # get data with units already in thousands 
+    x1 <- df %>% filter(UNIT == 'K')
+    
+    # convert data with units of millions to thousands
+    x2 <- df %>% filter(UNIT == 'M')
+    x2$AMOUNT <- x2$AMOUNT * 10^3
+    
+    # convert data with inits of billions to thousands
+    x3 <- df %>% filter(UNIT == 'B')
+    x3$AMOUNT <- x3$AMOUNT * 10^6
+    
+    # combine results
+    result <- rbind(x1,x2,x3)
+    return(result)
+}
+
+# update dataset to use common unit of thousand of dollars
+property3 <- convertDamages(property2)
+
+# convert character columns to factors
+property3$EVTYPE <- as.factor(property3$EVTYPE)
+property3$UNIT <- as.factor(property3$UNIT)
+property3$TYPE <- as.factor(property3$TYPE)
+
+
+```
+
+## Results
+
+### Events Impact on Population Health
+```{r}
+df <- people %>%
+        group_by(EVTYPE) %>%
+        summarise_each(funs(sum))
+
+require(ggplot2)
+
+ggplot(df) + 
+    geom_bar(aes(x=EVTYPE,y=FATALITIES), stat="identity") +
+    coord_flip()
+
+require(reshape2)
+df2 <- melt(df, id="EVTYPE")
+df2$variable <- as.factor(df2$variable)
+
+ggplot(df2) + 
+        geom_bar(aes(x=EVTYPE,y=log(value),fill=variable), stat="identity") +
+    coord_flip()
+```
+
+### Economic Consequences of Events Impact
+```{r}
+
+```
+
