@@ -103,6 +103,9 @@ mapEvent <- function(evt) {
 # use consolidated event types for people dataframe
 people$EVTYPE <- sapply(people$EVTYPE, mapEvent)
 
+# convert event type to a factor
+people$EVTYPE <- as.factor(people$EVTYPE)
+
 ```
 
 
@@ -160,31 +163,33 @@ head(property2)
 # update names for column
 names(property2) <- c('EVTYPE','UNIT','TYPE','AMOUNT')
 
-# function to convert all damages to thousands of dollars
-convertDamages <- function(df) {
+str(property2)
+
+
+convertUnits <- function(df) {
     # get data with units already in thousands 
     x1 <- df %>% filter(UNIT == 'K')
+    x1$AMOUNT <- x1$AMOUNT * 10^-3
     
     # convert data with units of millions to thousands
     x2 <- df %>% filter(UNIT == 'M')
-    x2$AMOUNT <- x2$AMOUNT * 10^3
+    #x2$AMOUNT <- x2$AMOUNT * 10^3
     
     # convert data with inits of billions to thousands
     x3 <- df %>% filter(UNIT == 'B')
-    x3$AMOUNT <- x3$AMOUNT * 10^6
+    x3$AMOUNT <- x3$AMOUNT * 10^3
     
     # combine results
     result <- rbind(x1,x2,x3)
+    result <- result[,c(1,3:4)]
     return(result)
 }
 
 # update dataset to use common unit of thousand of dollars
-property3 <- convertDamages(property2)
+property3 <- convertUnits(property2)
 
-# convert character columns to factors
+# convert event type to factor
 property3$EVTYPE <- as.factor(property3$EVTYPE)
-property3$UNIT <- as.factor(property3$UNIT)
-property3$TYPE <- as.factor(property3$TYPE)
 
 
 ```
@@ -193,27 +198,54 @@ property3$TYPE <- as.factor(property3$TYPE)
 
 ### Events Impact on Population Health
 ```{r}
+str(people)
+
+# get number of injuries or fatalities per event
 df <- people %>%
         group_by(EVTYPE) %>%
         summarise_each(funs(sum))
 
+head(df)
+
+# put data in long format
+df <- melt(df, id=c('EVTYPE'))
+names(df)
+
+# update names for 2nd and 3rd columns
+names(df)[2:3] <- c('TYPE','COUNT')
+
+# draw plot to display results
 require(ggplot2)
 
 ggplot(df) + 
-    geom_bar(aes(x=EVTYPE,y=FATALITIES), stat="identity") +
+    geom_bar(aes(x=EVTYPE,y=COUNT,fill=TYPE), stat="identity") +
+    ggtitle("Number of Fatalities & Injuries\n per Event (1950 - 2011)") +
+    labs(x="",y="") +
     coord_flip()
 
-require(reshape2)
-df2 <- melt(df, id="EVTYPE")
-df2$variable <- as.factor(df2$variable)
 
-ggplot(df2) + 
-        geom_bar(aes(x=EVTYPE,y=log(value),fill=variable), stat="identity") +
-    coord_flip()
 ```
 
 ### Economic Consequences of Events Impact
 ```{r}
+str(property3)
+
+df2 <- property3 %>%
+        group_by(EVTYPE, TYPE) %>%
+        summarise(AMOUNT=sum(AMOUNT))
+
+ggplot(df2) +
+    geom_bar(aes(x=EVTYPE,y=AMOUNT,fill=TYPE),stat="identity") +
+    ggtitle("Value of Crop & Property\n Damage per Event (1950 - 2011") +
+    labs(x="",y="Cost in millions") +
+    coord_flip()
+
+ggplot(property3) +
+    geom_bar(aes(x=EVTYPE,y=AMOUNT,fill=TYPE),stat="identity") +
+    ggtitle("Value of Crop & Property\n Damage per Event (1950 - 2011)") +
+    labs(x="",y="Cost in millions") +
+    coord_flip() +
+    facet_wrap(~ TYPE)
 
 ```
 
