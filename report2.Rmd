@@ -166,7 +166,68 @@ setTotal <- function(df) {
 }
 
 # update dataset with dollar values
-property <- setTotal(property)
+property <- setTotal(property) # took 894 secs.
+
+# OPTION 2
+require(reshape2)
+
+# get events where crops or property damage occurred
+property2 <- storm %>%
+                select(EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP) %>%
+                filter(PROPDMG > 0 | CROPDMG > 0)
+
+# remove rows with invalid value
+values <- c('k','K','m','M','b','B')
+property2 <- property2 %>%
+            filter(PROPDMGEXP %in% values | CROPDMGEXP %in% values)
+
+# update event type for property
+property2$EVTYPE <- sapply(property2$EVTYPE, getEvent)
+
+property2$PROPDMGEXP <- toupper(property2$PROPDMGEXP)
+property2$CROPDMGEXP <- toupper(property2$CROPDMGEXP)
+
+# collapse PROPDMGEXP and CROPDMGEXP into single column
+prop2 <- melt(property2, id=c('EVTYPE','PROPDMG','CROPDMG'))
+head(prop2)
+
+# collaspe PROPDMG and CROPDMG into single column
+prop2 <- melt(prop2, id=c('EVTYPE','variable','value'))
+head(prop2)
+
+# remove column 2, since it is no longer useful for analysis
+prop2 <- prop2[,-2]
+head(prop2)
+
+# update names for column
+names(prop2) <- c('EVTYPE','UNIT','TYPE','AMOUNT')
+
+# function to convert all damages to thousands of dollars
+convertDamages <- function(df) {
+    # get data with units already in thousands 
+    x1 <- df %>% filter(UNIT == 'K')
+    
+    # convert data with units of millions to thousands
+    x2 <- df %>% filter(UNIT == 'M')
+    x2$AMOUNT <- x2$AMOUNT * 10^3
+    
+    # convert data with inits of billions to thousands
+    x3 <- df %>% filter(UNIT == 'B')
+    x3$AMOUNT <- x3$AMOUNT * 10^6
+    
+    # combine results
+    result <- rbind(x1,x2,x3)
+    return(result)
+}
+
+# update dataset to use common unit of thousand of dollars
+prop2 <- convertDamages(prop2)
+
+# convert character columns to factors
+prop2$EVTYPE <- as.factor(prop2$EVTYPE)
+prop2$UNIT <- as.factor(prop2$UNIT)
+prop2$TYPE <- as.factor(prop2$TYPE)
+summary(prop2)
 
 ```
 
