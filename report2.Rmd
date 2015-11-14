@@ -1,0 +1,134 @@
+---
+title: 'Reproducible Reports - Project #2'
+author: "Mike G"
+date: "November 10, 2015"
+output: html_document
+---
+
+# Title
+
+### Questions:
+1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+columns: FATALIES, INJURIES
+
+
+2. Across the United States, which types of events have the greatest economic consequences?
+
+columns: PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP, WFO
+
+## Synopsis
+
+## Data Processing
+```{r, echo=TRUE}
+
+# load data
+storm <- read.csv('repdata-data-StormData.csv', stringsAsFactors = FALSE)
+
+# see list of columns in data
+names(storm)
+
+# list data type for each column
+str(storm)
+
+# get events where injuries or fatalities occurred
+require(dplyr)
+
+people <- storm %>%
+            select(EVTYPE, FATALITIES, INJURIES) %>%
+            filter(FATALITIES > 0 | INJURIES > 0)
+
+# look at type of events that impacted people
+table(people$EVTYPE)
+
+# function to consolidate event types
+getEvent <- function(evt) {
+    result <- "OTHER"
+    evt <- toupper(evt)
+    
+    if (grepl('TORNADO',evt)) {
+        result = 'TORNADO'
+    }
+    else if (grepl('FLOOD',evt) || grepl('RAIN',evt)) {
+         result = 'FLOOD'
+    }
+    else if (grepl('SEA',evt) || grepl('COASTAL',evt) || grepl('CURRENT',evt)) {
+         result = 'FLOOD'
+    }
+     else if (grepl('SURGE',evt) || grepl('SURF',evt) || grepl('RIVER',evt)) {
+         result = 'FLOOD'
+    }
+    else if (grepl('THUNDERSTORM',evt) || grepl('HAIL',evt)) {
+         result = 'THUNDERSTORM'
+    }
+    else if (grepl('SNOW',evt) || grepl('BLIZZARD',evt)) {
+         result = 'SNOW'
+    }
+    else if (grepl('COLD',evt) || grepl('ICE',evt) || grepl('ICY',evt)) {
+         result = 'LOW-TEMP'
+    }
+    else if (grepl('WINTER',evt)) {
+         result = 'LOW-TEMP'
+    }
+    else if (grepl('HEAT',evt) || grepl('WARM',evt)) {
+        result = 'HIGH-TEMP' 
+    }
+    else if (grepl('FIRE',evt)) {
+        result = 'FIRE'
+    }
+    else if (grepl('HURRICANE',evt)) {
+        result = 'HURRICANE'
+    }
+    else if (grepl('WIND',evt)) {
+        result = 'WIND'
+    }
+    else if (grepl('LIGHTNING',evt)) {
+        result = 'LIGHTNING'
+    }
+    else if (grepl('AVALANCHE',evt) || grepl('SLIDE',evt)) {
+        result <- 'LANDSLIDE'
+    }
+    else if (grepl('DUST',evt)) {
+        result <- 'DUST'
+    }
+    
+    return(result)
+}
+
+# update event type for people dataset
+people$EVTYPE <- sapply(people$EVTYPE, getEvent)
+
+df <- people %>%
+        group_by(EVTYPE) %>%
+        summarise_each(funs(sum))
+
+require(ggplot2)
+
+ggplot(df) + 
+    geom_bar(aes(x=EVTYPE,y=FATALITIES), stat="identity") +
+    coord_flip()
+
+require(reshape2)
+df2 <- melt(df, id="EVTYPE")
+df2$variable <- as.factor(df2$variable)
+
+ggplot(df2) + 
+        geom_bar(aes(x=EVTYPE,y=log(value),fill=variable), stat="identity") +
+    coord_flip()
+
+# get events where crops or property damage occurred
+property <- storm %>%
+                select(EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP) %>%
+                filter(PROPDMG > 0 | CROPDMG > 0)
+
+# see the types of events
+table(storm$EVTYPE)
+
+
+
+```
+
+
+## Results
+
+
