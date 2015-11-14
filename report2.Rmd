@@ -121,10 +121,52 @@ property <- storm %>%
                 select(EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP) %>%
                 filter(PROPDMG > 0 | CROPDMG > 0)
 
-# see the types of events
-table(storm$EVTYPE)
+# update event type for property
+property$EVTYPE <- sapply(property$EVTYPE, getEvent)
 
+# remove rows with invalid value
+values <- c('k','K','m','M','b','B')
+property <- property %>%
+            filter(PROPDMGEXP %in% values | CROPDMGEXP %in% values)
 
+property$PROPDMGEXP <- toupper(property$PROPDMGEXP)
+property$CROPDMGEXP <- toupper(property$CROPDMGEXP)
+
+property$CROPDMGTOT <- 0
+property$PROPDMGTOT <- 0
+
+# function to convert damages to dollar
+getAmount <- function(x, char) {
+    result <- x
+    if (char == 'K') {
+        result <- x * 10^3
+    }
+    else if (char == 'M') {
+        result <- x * 10^6
+    }
+    else if (char == 'B') {
+        result <- x * 10^9
+    }
+    return(result)
+}
+
+setTotal <- function(df) {
+    n <- length(df[,1])
+    
+    for (i in 1:n) {
+        prop <- df[i,2]
+        propexp <- df[i,3]
+        df[i,7] <- getAmount(prop, propexp)
+        
+        crop <- df[i,4]
+        cropexp <- df[i,5]
+        df[i,6] <- getAmount(crop, cropexp)
+    }
+    return(df)
+}
+
+# update dataset with dollar values
+property <- setTotal(property)
 
 ```
 
