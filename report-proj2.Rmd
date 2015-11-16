@@ -1,29 +1,21 @@
----
-title: 'Reproducible Reports - Project #2'
-author: "Mike G"
-date: "November 10, 2015"
-output: html_document
----
+# Title: Storm Data Analysis
 
-# Title
-
-### Questions:
-1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
-
-columns: FATALIES, INJURIES
-
-
-2. Across the United States, which types of events have the greatest economic consequences?
-
-columns: PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP, WFO
 
 ## Synopsis
+Storms and other severe weather events can cause both public health and economic problems for communities across the country. To view the economic and health impact of adverse weather in the United States, I analyzed storm data for the years 1950 to 2011 from the US National Oceanic and Atmospheric Administration (NOA) storm database. 
+
+Before analyzing the data, I first loaded it into a R dataframe. After loading the data, I created two dataframes, one that contains public health impact and another that contains economic impact. I then cleaned data by removing unnecessary rows, consolidating the number of events and converting economic cost to a common uint. 
+
+Once the data was cleaned-up, I performed summary analysis on each event type to see which ones had the biggest impact on public health and economic impact. Once the summary data was generated, graphs were created to show the visual impact of each event type on public health and economic impact.  
+
+
+
 
 ## Data Processing  
 
-### Load Data into R  
+### STEP 1: Load Data into R  
 
-```{r, echo=TRUE}
+```{r, cache=TRUE}
 
 # load storm data into a dataframe
 storm <- read.table('repdata-data-StormData.csv.bz2', stringsAsFactors = FALSE,sep=",",header=TRUE)
@@ -33,9 +25,10 @@ str(storm)
 
 ```
 
-### Data Processing - Population Health  
+### STEP 2: Data Processing - Population Health  
+This section contains the steps executed to prepare storm data that had an impact on public health.  
 
-```{r}
+```{r, cache=TRUE}
 # get events where injuries or fatalities occurred
 require(dplyr)
 
@@ -46,7 +39,7 @@ people <- storm %>%
 # look at type of events that impacted people's health
 table(people$EVTYPE)
 
-# We have over 200 events, so let's consolidate them for analysis.
+# We have over 200 events, so let's create a function to consolidate them for analysis.
 mapEvent <- function(evt) {
     result <- "OTHER"
     evt <- toupper(evt)
@@ -109,7 +102,8 @@ people$EVTYPE <- as.factor(people$EVTYPE)
 ```
 
 
-### Data Processing - Economic Impact 
+### STEP 3: Data Processing - Economic Impact 
+This section contains the steps executed to prepare storm data that had an economic impact.  
 
 ```{r}
 
@@ -121,15 +115,12 @@ property <- storm %>%
 ```
 
 #### Common Unit for Economic Damage  
-In the storm dataset, columns CROPDMGEXP and PROPDMGEXP contain the units for
-economic damage listed in columns CROPDMG AND PROPDMG. The columns use the 
-following symbols:  
+In the storm dataset, columns CROPDMGEXP and PROPDMGEXP contain the units for economic damage listed in columns CROPDMG AND PROPDMG. The columns use the following symbols:  
 * k or K - dollars in thousands
 * m or M - dollars in millions
 * b or B - dollars in billions  
 
-For our analysis, we will convert all damage amounts to units of thousand of 
-dollars.
+For our analysis, we will convert all units to millions of dollars.
 
 ```{r}
 
@@ -143,8 +134,6 @@ values <- c('K','M','B')
 property <- property %>%
             filter(PROPDMGEXP %in% values | CROPDMGEXP %in% values)
 
-# use consolidated events for property dataframe
-property$EVTYPE <- sapply(property$EVTYPE, mapEvent)
 
 require(reshape2)
 
@@ -161,21 +150,20 @@ property2 <- property2[,-2]
 head(property2)
 
 # update names for column
-names(property2) <- c('EVTYPE','UNIT','TYPE','AMOUNT')
+names(property2)[2:4] <- c('UNIT','TYPE','AMOUNT')
 
 str(property2)
 
-
+# function used to convert damage cost to millions of dollars
 convertUnits <- function(df) {
-    # get data with units already in thousands 
+    # convert data with units of thousands to millions 
     x1 <- df %>% filter(UNIT == 'K')
     x1$AMOUNT <- x1$AMOUNT * 10^-3
     
-    # convert data with units of millions to thousands
+    # no conversion for data with units already in millions
     x2 <- df %>% filter(UNIT == 'M')
-    #x2$AMOUNT <- x2$AMOUNT * 10^3
     
-    # convert data with inits of billions to thousands
+    # convert data with inits of billions to millions
     x3 <- df %>% filter(UNIT == 'B')
     x3$AMOUNT <- x3$AMOUNT * 10^3
     
@@ -185,18 +173,24 @@ convertUnits <- function(df) {
     return(result)
 }
 
-# update dataset to use common unit of thousand of dollars
+# update dataset to use units of millions for damage amount
 property3 <- convertUnits(property2)
+
+# use consolidated events for property dataframe
+property3$EVTYPE <- sapply(property3$EVTYPE, mapEvent)
 
 # convert event type to factor
 property3$EVTYPE <- as.factor(property3$EVTYPE)
 
-
 ```
 
-## Results
+## Results  
+Now that the data is the desired state, we can perform the analysis required to answer the following questions:  
 
-### Events Impact on Population Health
+1. Across the United State, which types of events are most harmful with respect to population health?  
+2. Across the United States, which types of events have the greatest economic consequences?  
+
+### Part A: Events Impact on Population Health
 ```{r}
 str(people)
 
@@ -216,17 +210,30 @@ names(df)[2:3] <- c('TYPE','COUNT')
 
 # draw plot to display results
 require(ggplot2)
+require(gridExtra)
 
-ggplot(df) + 
-    geom_bar(aes(x=EVTYPE,y=COUNT,fill=TYPE), stat="identity") +
+# draw graph showing absolute values
+g1 <- ggplot(df) + 
+    geom_bar(aes(x=EVTYPE,y=COUNT,fill=TYPE), 
+                    stat="identity") +
     ggtitle("Number of Fatalities & Injuries\n per Event (1950 - 2011)") +
     labs(x="",y="") +
     coord_flip()
 
+# convert count to log10 to show more details
+g2 <- ggplot(df) + 
+    geom_bar(aes(x=EVTYPE,y=log10(COUNT),fill=TYPE), 
+                    stat="identity") +
+    ggtitle("Number of Fatalities & Injuries\n per Event (1950 - 2011)") +
+    labs(x="",y="Units in log10") +
+    coord_flip()
+
+# plot graphs
+grid.arrange(g1, g2, ncol=1)
 
 ```
 
-### Economic Consequences of Events Impact
+### Part B: Economic Consequences of Events Impact
 ```{r}
 str(property3)
 
@@ -234,18 +241,19 @@ df2 <- property3 %>%
         group_by(EVTYPE, TYPE) %>%
         summarise(AMOUNT=sum(AMOUNT))
 
-ggplot(df2) +
+g3 <- ggplot(df2) +
     geom_bar(aes(x=EVTYPE,y=AMOUNT,fill=TYPE),stat="identity") +
     ggtitle("Value of Crop & Property\n Damage per Event (1950 - 2011") +
     labs(x="",y="Cost in millions") +
     coord_flip()
 
-ggplot(property3) +
-    geom_bar(aes(x=EVTYPE,y=AMOUNT,fill=TYPE),stat="identity") +
+g4 <- ggplot(df2) +
+    geom_bar(aes(x=EVTYPE,y=log10(AMOUNT),fill=TYPE),stat="identity") +
     ggtitle("Value of Crop & Property\n Damage per Event (1950 - 2011)") +
-    labs(x="",y="Cost in millions") +
-    coord_flip() +
-    facet_wrap(~ TYPE)
+    labs(x="",y="log10 Cost in millions") +
+    coord_flip() 
+    
+    grid.arrange(g3, g4, ncol=1)
 
 ```
 
